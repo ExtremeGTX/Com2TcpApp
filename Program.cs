@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO.Ports;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -113,16 +114,46 @@ public class PortForwarder
         }
     }
 
+    public static string GetWSLIpAddress()
+    {
+        var name = "vEthernet (WSL)";
+        var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
+        foreach (var ni in networkInterfaces)
+        {
+            if (ni.Name == name && ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
+            {
+                var ipProps = ni.GetIPProperties();
+                foreach (var ip in ipProps.UnicastAddresses)
+                {
+                    if (ip.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    {
+                        return ip.Address.ToString();
+                    }
+                }
+            }
+        }
+        throw new Exception("Could not find IP address for 'vEthernet (WSL)'");
+    }
+
     public static async Task Main(string[] args)
     {
         if (args.Length != 3)
         {
-            Console.WriteLine("Usage: PortForwarder.exe COMPort TCPAddress TCPPort");
+            Console.WriteLine("Usage: com2tcp.exe COMPort TCPAddress TCPPort");
             return;
         }
 
         var comPortName = args[0];
         var tcpAddress = args[1];
+        if (tcpAddress.ToLower() == "wsl")
+        {
+            tcpAddress = GetWSLIpAddress();
+        }
+        else if (!IPAddress.TryParse(tcpAddress, out _))
+        {
+            Console.WriteLine("The TCPAddress must be an IP address or 'wsl'.");
+            return;
+        }
         if (!int.TryParse(args[2], out var tcpPort))
         {
             Console.WriteLine("The TCPPort must be an integer.");
