@@ -5,6 +5,23 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using CommandLine;
+
+
+class Options
+{
+    [Option("com-port", Required = true, HelpText = "Input files to be processed.")]
+    public string ComPort { get; set; }
+
+    [Option("tcp-port", Required = false, Default = 5001, HelpText = "Input files to be processed.")]
+    public int TcpPort { get; set; }
+
+    [Option("tcp-address", Required = false, Default = "0.0.0.0", HelpText = "Input files to be processed.")]
+    public string TcpAddress { get; set; }
+
+    [Option("wsl", Required = false, Default = false, HelpText = "Input files to be processed.")]
+    public bool Wsl { get; set; }
+}
 
 public class PortForwarder
 {
@@ -12,21 +29,25 @@ public class PortForwarder
     private readonly IPAddress tcpAddress;
     private readonly int tcpPort;
 
+    private List<TcpClient> ActiveConnection = new List<TcpClient>();
+
     public PortForwarder(string comPortName, string tcpAddress, int tcpPort)
     {
         this.comPortName = comPortName;
         this.tcpAddress = IPAddress.Parse(tcpAddress);
         this.tcpPort = tcpPort;
     }
-
     public async Task StartAsync(CancellationToken mainCancellationToken)
     {
         SerialPort? comPort = null;
         TcpListener? tcpListener = null;
-
+        TcpClient? tcpClient = null;
+        TcpClient? ActivetcpClient = null;
+        Task? ActiveTask = null;
+        CancellationTokenSource ActiveTaskCancellationToken = new CancellationTokenSource();
         while (!mainCancellationToken.IsCancellationRequested)
         {
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(mainCancellationToken);
+            //var cts = CancellationTokenSource.CreateLinkedTokenSource(mainCancellationToken);
             try
             {
                 comPort = new SerialPort(comPortName);
@@ -36,15 +57,28 @@ public class PortForwarder
                 tcpListener.Start();
 
                 Console.WriteLine($"Ready! forwarding Port:{comPortName} <-> TCP:{tcpAddress.ToString()}:{tcpPort.ToString()}");
-                Console.Write("Waiting for connection ... ");
-                using (var tcpClient = await tcpListener.AcceptTcpClientAsync())
+                Console.WriteLine("Waiting for connection ... ");
+                while (true)
                 {
-                    var tcpStream = tcpClient.GetStream();
-                    Console.WriteLine("Connected!");
-                    await Task.WhenAll(
-                        ForwardComToTcpAsync(comPort, tcpStream, cts),
-                        ForwardTcpToComAsync(tcpStream, comPort, cts.Token)
-                    );
+                    tcpClient = await tcpListener.AcceptTcpClientAsync();
+                    if (ActiveTask != null && !ActiveTask.IsCompleted)
+                    {
+                        Console.WriteLine("Connection already active, closing old connection");
+                        //Use cancellation token to cancel the task
+                        ActiveTaskCancellationToken.Cancel();
+                        ActiveTask.Wait();
+                        ActiveTaskCancellationToken.Dispose();
+                        ActiveTaskCancellationToken = new CancellationTokenSource();
+                    }
+                    ActivetcpClient = tcpClient;
+                    ActiveTaskCancellationToken.Token.Register(() =>
+                    {
+                        ActivetcpClient.GetStream().Close();
+                        ActivetcpClient.Close();
+                        if (comPort.IsOpen)
+                        { comPort.DiscardInBuffer(); }
+                    });
+                    ActiveTask = HandleClientAsync(ActivetcpClient, comPort, ActiveTaskCancellationToken.Token);
                 }
             }
             catch (Exception ex)
@@ -60,60 +94,105 @@ public class PortForwarder
             }
         }
     }
-
-    private async Task ForwardComToTcpAsync(SerialPort comPort, NetworkStream tcpStream, CancellationTokenSource cts)
+    private async Task HandleClientAsync(TcpClient tcpClient, SerialPort comPort, CancellationToken cts)
     {
+        Console.WriteLine($"Active Conn: Intiating...");
+        var tcpStream = tcpClient.GetStream();
+        while (!cts.IsCancellationRequested)
+        {
+            try
+            {
+                while (!comPort.IsOpen)
+                {
+                    comPort.Open();
+                    Console.WriteLine($"Active Conn: Waiting for COM port to open");
+                    await Task.Delay(1000);
+                }
+                Console.WriteLine($"Active Conn: Connected!");
+                await Task.WhenAll(ForwardTcpToComAsync(tcpStream, comPort, cts),
+                                    ForwardComToTcpAsync(comPort, tcpClient, cts));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Active Conn: Error occurred: {ex.Message}");
+            }
+            finally
+            {
+                if (!cts.IsCancellationRequested)
+                {
+                    Console.WriteLine($"Active Conn: Restarting....");
+                }
+                else
+                {
+                    Console.WriteLine($"Active Conn: is Cancelled ({cts.IsCancellationRequested})");
+                }
+            }
+        }
+    }
+
+    private async Task ForwardComToTcpAsync(SerialPort comPort, TcpClient tcpClient, CancellationToken cts)
+    {
+        NetworkStream tcpStream = tcpClient.GetStream();
         byte[] buffer = new byte[4096];
         try
         {
-            while (!cts.Token.IsCancellationRequested)
+            while (!cts.IsCancellationRequested)
             {
-                int bytesRead = await comPort.BaseStream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
+                int bytesRead = await comPort.BaseStream.ReadAsync(buffer, 0, buffer.Length, cts);
                 if (bytesRead > 0)
                 {
 #if EXTRA_DEBUG
                     Console.WriteLine("Com->Tcp");
 #endif
-                    await tcpStream.WriteAsync(buffer, 0, bytesRead, cts.Token);
+                    await tcpStream.WriteAsync(buffer, 0, bytesRead, cts);
                 }
             }
         }
-
         catch (Exception ex)
         {
-            Console.WriteLine($"COM->TCP: Failed ({ex.Message}), restarting...");
-            cts.Cancel();
+            Console.WriteLine($"COM->TCP: Failed ({ex.Message})");
+        }
+        finally
+        {
+            Console.WriteLine($"COM->TCP: Cancelled={cts.IsCancellationRequested}");
         }
     }
 
-    private async Task ForwardTcpToComAsync(NetworkStream tcpStream, SerialPort comPort, CancellationToken cancellationToken)
+    private async Task ForwardTcpToComAsync(NetworkStream tcpStream, SerialPort comPort, CancellationToken cts)
     {
         byte[] buffer = new byte[4096];
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
+            while (!cts.IsCancellationRequested)
             {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    Console.WriteLine("Tcp2Com Cancelled");
-                }
-                int bytesRead = await tcpStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                int bytesRead = await tcpStream.ReadAsync(buffer, 0, buffer.Length, cts).ConfigureAwait(false);
                 if (bytesRead > 0)
                 {
 #if EXTRA_DEBUG
                     Console.WriteLine("Tcp->Com");
 #endif
-                    await comPort.BaseStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                    await comPort.BaseStream.WriteAsync(buffer, 0, bytesRead, cts);
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"TCP->COM: Failed ({ex.Message}), restarting...");
-            throw;
+            Console.WriteLine($"TCP->COM: Failed ({ex.Message})");
+        }
+        finally
+        {
+            Console.WriteLine($"TCP->COM: Cancelled=({cts.IsCancellationRequested})");
         }
     }
+}
 
+public class Com2Tcp
+{
+    /// <summary>
+    /// Get the IP address of the WSL interface
+    /// </summary>
+    /// <returns></returns>
+    /// <exception cref="Exception"></exception>
     public static string GetWSLIpAddress()
     {
         var name = "vEthernet (WSL)";
@@ -135,32 +214,26 @@ public class PortForwarder
         throw new Exception("Could not find IP address for 'vEthernet (WSL)'");
     }
 
-    public static async Task Main(string[] args)
+    /// <summary>
+    /// Parse command line options and Start the port forwarder
+    /// </summary>
+    /// <param name="opts"></param>
+    /// <returns></returns>
+    static async Task RunOptions(Options opts)
     {
-        if (args.Length != 3)
-        {
-            Console.WriteLine("Usage: com2tcp.exe COMPort TCPAddress TCPPort");
-            return;
-        }
+        String tcpAddress;
 
-        var comPortName = args[0];
-        var tcpAddress = args[1];
-        if (tcpAddress.ToLower() == "wsl")
+        if (opts.Wsl)
         {
             tcpAddress = GetWSLIpAddress();
+            Console.WriteLine($"Listening on WSL IP address: {tcpAddress}");
         }
-        else if (!IPAddress.TryParse(tcpAddress, out _))
+        else
         {
-            Console.WriteLine("The TCPAddress must be an IP address or 'wsl'.");
-            return;
-        }
-        if (!int.TryParse(args[2], out var tcpPort))
-        {
-            Console.WriteLine("The TCPPort must be an integer.");
-            return;
+            tcpAddress = opts.TcpAddress;
         }
 
-        var portForwarder = new PortForwarder(comPortName, tcpAddress, tcpPort);
+        var portForwarder = new PortForwarder(opts.ComPort, tcpAddress, opts.TcpPort);
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (sender, e) =>
         {
@@ -177,5 +250,32 @@ public class PortForwarder
         };
 
         await portForwarder.StartAsync(cts.Token);
+    }
+
+    /// <summary>
+    /// Handle parse errors
+    /// </summary>
+    /// <param name="errs"></param>
+    static void HandleParseError(IEnumerable<Error> errs)
+    {
+        //handle errors
+    }
+
+    /// <summary>
+    /// Main entry point
+    /// </summary>
+    /// <param name="args"></param>
+    /// <returns></returns>
+    public static async Task Main(string[] args)
+    {
+        try
+        {
+            await CommandLine.Parser.Default.ParseArguments<Options>(args)
+                .WithParsedAsync(RunOptions);
+        }
+        catch (System.Exception)
+        {
+            throw;
+        }
     }
 }

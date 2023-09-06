@@ -11,8 +11,11 @@
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/bin/Debug/net6.0/Com2TcpApp.dll",
             "args": [
+                "--com-port",
                 "COM13",
+                "--tcp-address",
                 "172.21.224.1",
+                "--tcp-port",
                 "5001"
             ],
             "cwd": "${workspaceFolder}",
@@ -20,15 +23,17 @@
             "stopAtEntry": false
         },
         {
-            "name": ".NET Core Launch (wsl)",
+            "name": ".NET Core Launch (WSL)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/bin/Debug/net6.0/Com2TcpApp.dll",
             "args": [
+                "--com-port",
                 "COM13",
-                "wsl",
-                "5001"
+                "--tcp-port",
+                "5001",
+                "--wsl"
             ],
             "cwd": "${workspaceFolder}",
             "console": "internalConsole",
