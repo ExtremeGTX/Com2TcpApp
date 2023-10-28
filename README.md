@@ -76,6 +76,11 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 
 <!-- CONTACT -->
+## TODO
+
+Add compliance with RFC2217
+
+<!-- CONTACT -->
 ## Contact
 
 Mohamed ElShahawi - [@extremegtx](https://twitter.com/extremegtx)
@@ -92,15 +97,15 @@ Project Link: [https://github.com/ExtremeGTX/Com2TcpApp](https://github.com/Extr
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/ExtremeGTX/USBWatcher.svg?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/ExtremeGTX/Com2TcpApp?style=for-the-badge
 [contributors-url]: https://github.com/ExtremeGTX/Com2TcpApp/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/ExtremeGTX/USBWatcher.svg?style=for-the-badge
+[forks-shield]: https://img.shields.io/github/forks/ExtremeGTX/Com2TcpApp?style=for-the-badge
 [forks-url]: https://github.com/ExtremeGTX/Com2TcpApp/network/members
-[stars-shield]: https://img.shields.io/github/stars/ExtremeGTX/USBWatcher.svg?style=for-the-badge
+[stars-shield]: https://img.shields.io/github/stars/extremegtx/Com2TcpApp?style=for-the-badge
 [stars-url]: https://github.com/ExtremeGTX/Com2TcpApp/stargazers
-[issues-shield]: https://img.shields.io/github/issues/ExtremeGTX/USBWatcher.svg?style=for-the-badge
+[issues-shield]: https://img.shields.io/github/issues/ExtremeGTX/Com2TcpApp?style=for-the-badge
 [issues-url]: https://github.com/ExtremeGTX/Com2TcpApp/issues
-[license-shield]: https://img.shields.io/github/license/ExtremeGTX/USBWatcher.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/ExtremeGTX/Com2TcpApp?style=for-the-badge
 [license-url]: https://github.com/ExtremeGTX/Com2TcpApp/blob/master/LICENSE.txt
 [product-screenshot]: docs/USBWatcher_Screenshot.png
 [VS-url]: https://code.visualstudio.com/
