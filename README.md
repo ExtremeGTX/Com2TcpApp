@@ -59,16 +59,25 @@
 
 <!-- USAGE EXAMPLES -->
 ## Usage
+#### Server side:
+  - Basic usage:
+    `com2tcp.exe --com-port COM1`
 
-- Basic usage:
-  `com2tcp.exe --com-port COM1`
+  - Specify Adapter address and port
+    `com2tcp.exe --com-port COM1 --tcp-address 192.168.1.2 --tcp-port 5001`
 
-- Specify Adapter address and port
-  `com2tcp.exe --com-port COM1 --tcp-address 192.168.1.2 --tcp-port 5001`
+  - Forward the COM port on the WSL adapter
+    `com2tcp.exe --com-port COM1 --tcp-port 5001 --wsl`
 
-- Forward the COM port on the WSL adapter
-  `com2tcp.exe --com-port COM1 --tcp-port 5001 --wsl`
+#### Client side (**TCP**):
+  - Use any TCP Client to connect to the forwarded port using the server-ip and port
+  specified in the previous step.
 
+#### Client side (**Serial**):
+  1. you can use `socat` to change the TCP connection back to serial.
+     > sudo socat -d -d -d TCP:172.21.224.1:5001 pty,link=/dev/ttyVA00,raw,echo=0,perm=0777
+  2. Then use a serial terminal, for example `microcom`
+     > sudo microcom -p /dev/ttyVA00
 <!-- LICENSE -->
 ## License
 
@@ -78,7 +87,7 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## TODO
 
-Add compliance with RFC2217
+Add compliance with RFC2217 to support Line control
 
 <!-- CONTACT -->
 ## Contact
